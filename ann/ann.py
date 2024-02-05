@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import cv2
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
@@ -116,35 +117,61 @@ def red_green(array):
     # Convert to integers and create a Pillow Image
     image = Image.fromarray((colored_array * 255).astype(np.uint8), mode='RGB')
     image.save('output_r&g.png')
-    image.show()
 
-def resize(array):
-    original_size = array.shape
-    desired_size = (1080, 1728)
+def resize():
+    # Assuming you have an image named 'original_image'
+    original_image = Image.open("output_r&g.png")
+    original_array = np.array(original_image)
+    
+    # Define the desired size and the number of points for interpolation
+    desired_size = (640, 400)
+    interpolation_factor = 10  # Increase for more points, decrease for fewer points
 
     # Create coordinate grids for original and desired sizes
-    x_orig, y_orig = np.linspace(0, 1, original_size[1]), np.linspace(0, 1, original_size[0])
+    x_orig, y_orig = np.linspace(0, 1, original_array.shape[1]), np.linspace(0, 1, original_array.shape[0])
     x_new, y_new = np.linspace(0, 1, desired_size[1]), np.linspace(0, 1, desired_size[0])
 
-    # Create interpolation function
-    #interp_func = interp2d(x_orig, y_orig, array, kind='linear')
-    interp_func = interp2d(x_orig, y_orig, array, kind='nearest')
+    # Perform linear interpolation manually
+    interpolated_array = np.zeros((desired_size[0], desired_size[1], original_array.shape[2]), dtype=np.uint8)
 
-    # Interpolate values for the new size
-    interpolated_array = interp_func(x_new, y_new)
+    for channel in range(original_array.shape[2]):
+        for i in range(desired_size[0]):
+            for j in range(desired_size[1]):
+                x_idx = int(j * (original_array.shape[1] - 1) / (desired_size[1] - 1))
+                y_idx = int(i * (original_array.shape[0] - 1) / (desired_size[0] - 1))
 
-    # Display the original and interpolated arrays
-    # plt.imshow(array, cmap='viridis', extent=[0, 1, 0, 1])
-    # plt.title('Original Array')
-    # plt.show()
+                x_low, x_high = x_orig[max(x_idx - 1, 0)], x_orig[min(x_idx + 1, len(x_orig) - 1)]
+                y_low, y_high = y_orig[max(y_idx - 1, 0)], y_orig[min(y_idx + 1, len(y_orig) - 1)]
 
-    # plt.imshow(interpolated_array, cmap='viridis', extent=[0, 1, 0, 1])
-    # plt.title('Interpolated Array')
-    # plt.show()
+                interpolated_array[i, j, channel] = (
+                    (x_high - x_new[j]) * (y_high - y_new[i]) * original_array[y_low, x_low, channel] +
+                    (x_new[j] - x_low) * (y_high - y_new[i]) * original_array[y_low, x_high, channel] +
+                    (x_high - x_new[j]) * (y_new[i] - y_low) * original_array[y_high, x_low, channel] +
+                    (x_new[j] - x_low) * (y_new[i] - y_low) * original_array[y_high, x_high, channel]
+                ).astype(np.uint8)
+
+    # Create a new image from the interpolated array
+    interpolated_image = Image.fromarray(interpolated_array)
+
+    # Display the original and interpolated images
+    plt.imshow(original_array, cmap='viridis', extent=[0, 1, 0, 1])
+    plt.title('Original Image')
+    plt.show()
+
+    plt.imshow(interpolated_array, cmap='viridis', extent=[0, 1, 0, 1])
+    plt.title(f'Interpolated Image (Manual, {interpolation_factor}x Interpolation)')
+    plt.show()
+
     return interpolated_array
 
+def cv2resize():
+    img = cv2.imread('output_b&w.png')
+    res = cv2.resize(img, dsize=(640, 400), interpolation=cv2.INTER_)
+    cv2.imwrite("black&white.png", res)
+
+
 weights = analyse()
-weights = resize(weights)
+red_green(weights)
+weights = resize()
 
 #black_white(weights)
-red_green(weights)
