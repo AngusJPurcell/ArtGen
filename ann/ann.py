@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp2d
 #from ann_visualizer.visualize import ann_viz;
 from PIL import Image, ImageFilter
+import random
+import noise
 
 def create():
     dataset = pd.read_csv('data/train.csv')
@@ -27,8 +29,8 @@ def create():
     x_train, x_test, y_train, y_test = train_test_split(x,y,test_size = 0.1)
 
     model = Sequential()
-    model.add(Dense(18, input_dim=20, activation='relu'))
-    model.add(Dense(16, activation='relu'))
+    model.add(Dense(16, input_dim=20, activation='relu'))
+    model.add(Dense(12, activation='relu'))
     model.add(Dense(4, activation='softmax'))
 
     # Create a folder to save the weights
@@ -38,18 +40,11 @@ def create():
     # # Define the filepath for saving weights
     # weights_filepath = os.path.join(weights_folder, 'weights_epoch_{epoch:02d}.keras')
 
-    # Define a callback to save the model weights at each epoch
-    checkpoint = ModelCheckpoint("weights\weights_epoch_{epoch:02d}.keras", 
-                                monitor='val_loss', 
-                                save_weights_only=True,
-                                save_best_only=False,
-                                mode='auto',
-                                verbose=1)
 
 
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-    history = model.fit(x_train, y_train, validation_data = (x_test,y_test), epochs=100, batch_size=64,  callbacks=[checkpoint])
+    history = model.fit(x_train, y_train, validation_data = (x_test,y_test), epochs=100, batch_size=64)
 
     model.save("ann_100epoch.keras")
     # plt.plot(history.history['accuracy'])
@@ -74,11 +69,13 @@ def create():
 
 def analyse():
     model = keras.saving.load_model("ann_100epoch.keras")
+    print("model loaded")
 
     individual_weights = []
     for i, layer in enumerate(model.layers):
         weights = np.array(layer.get_weights()[0])
         individual_weights.append(weights)
+    print('weights acquired')
     
     min_value = np.min(individual_weights[0])
     max_value = np.max(individual_weights[0])
@@ -115,61 +112,6 @@ def analyse():
     normalised_array = (result - min_value) / (max_value - min_value)
     normalised_array_scaled = normalised_array * 255
     return normalised_array_scaled
-
-def analyse_mov():
-    weights = np.array([])
-    model = keras.saving.load_model('weights\weights_epoch_01.keras')
-    # Iterate through every file in the folder
-    for filename in os.listdir('weights'):
-        # Check if the entry is a file
-        filename = os.path.join("weights", filename)
-        if os.path.isfile(filename):
-            print(filename)
-            
-            model = keras.saving.load_model(filename)
-
-            individual_weights = []
-            for i, layer in enumerate(model.layers):
-                weights = np.array(layer.get_weights()[0])
-                individual_weights.append(weights)
-            
-            min_value = np.min(individual_weights[0])
-            max_value = np.max(individual_weights[0])
-
-            # Iterate through the remaining arrays in the list
-            for arr in individual_weights[1:]:
-                min_value = min(min_value, np.min(arr))
-                max_value = max(max_value, np.max(arr))
-
-            for i in range(len(individual_weights)):
-                individual_weights[i] += (min_value * (-1))
-
-            max_value += (min_value * (-1))
-            min_value += (min_value * (-1))
-                
-            max_rows = max(individual_weights[0].shape[0], individual_weights[1].shape[0], individual_weights[2].shape[0])
-            max_cols = max(individual_weights[0].shape[1], individual_weights[1].shape[1], individual_weights[2].shape[1])
-
-            pad_top_arr1 = (max_rows - individual_weights[0].shape[0]) // 2
-            pad_bottom_arr1 = max_rows - individual_weights[0].shape[0] - pad_top_arr1
-
-            pad_top_arr2 = (max_rows - individual_weights[1].shape[0]) // 2
-            pad_bottom_arr2 = max_rows - individual_weights[1].shape[0] - pad_top_arr2
-
-            pad_top_arr3 = (max_rows - individual_weights[2].shape[0]) // 2
-            pad_bottom_arr3 = max_rows - individual_weights[2].shape[0] - pad_top_arr3
-
-            result = np.concatenate([
-                np.pad(individual_weights[0], ((pad_top_arr1, pad_bottom_arr1), (0, 0))),
-                np.pad(individual_weights[1], ((pad_top_arr2, pad_bottom_arr2), (0, 0))),
-                np.pad(individual_weights[2], ((pad_top_arr3, pad_bottom_arr3), (0, 0)))
-            ], axis=1)
-
-            normalised_array = (result - min_value) / (max_value - min_value)
-            normalised_array_scaled = normalised_array * 255
-
-            weights.append(normalised_array_scaled)
-    return weights
 
 def black_white(array):
     # Create a PIL Image from the 3D array
@@ -242,11 +184,47 @@ def resize():
 
 def cv2resize():
     img = cv2.imread('output_b&w.png')
-    res = cv2.resize(img, dsize=(640, 400), interpolation=cv2.INTER_LANCZOS4)
+    res = cv2.resize(img, dsize=(1920, 1080), interpolation=cv2.INTER_NEAREST)
     # smoothed_image = cv2.GaussianBlur(res, (1, 1), 0)
-    cv2.imshow("smoothed image", res)
-    cv2.waitKey(0)
+    # cv2.imshow("smoothed image", cv2.GaussianBlur(res, (5, 5), 0))
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    # Define the dimensions of each segment
+    segment_width = 1920 // 38
+    segment_height = 1080 // 20
+
+    # Define a function to move the borders
+    def move_borders(res):
+        # Create a copy of the image
+        new_image = np.copy(res)
+        
+        # Iterate over vertical borders
+        for y in range(1, 20):
+            shift_amount = random.randint(-5, 5)
+            new_image[y * segment_height : y * segment_height + shift_amount, :] = res[y * segment_height - shift_amount : y * segment_height, :]
+        
+        # Iterate over horizontal borders
+        for x in range(1, 38):
+            shift_amount = random.randint(-5, 5)
+            new_image[:, x * segment_width : x * segment_width + shift_amount] = res[:, x * segment_width - shift_amount : x * segment_width]
+
+        return new_image
+
+    # Function to continuously update and display the image
+    def update_image():
+        while True:
+            moved_image = move_borders(res)
+            cv2.imshow('Fluid Grid', moved_image)
+            if cv2.waitKey(100) & 0xFF == ord('q'):  # Press 'q' to quit
+                break
+
+    # Call the function to start displaying the image
+    update_image()
+
+    # Release resources
     cv2.destroyAllWindows()
+
 
 def resize_blur(array):
     pixel_width = array.shape[1]
@@ -265,24 +243,10 @@ def resize_blur(array):
     smoothed_image = image.filter(ImageFilter.GaussianBlur(blur_radius))
     smoothed_image.save("b&w_expanded_blur.png")
 
-def process_mov(array, filename):
-    image = Image.fromarray(array.astype(np.uint8))
-    image.save('filename')
-
-    img = cv2.imread('filename')
-    res = cv2.resize(img, dsize=(640, 400), interpolation=cv2.INTER_LANCZOS4)
-
-    cv2.imwrite("savename", res)
-
-
 
 #create()
-weights = analyse_mov()
-for i in range(weights.shape(0)):
-    filename = f"unfiltered/unfiltered_b&w_{i}.png"
-    savename = f"smooth/smooth_b&w_{i}.png"
-    process_mov(weights[i], filename)
-#cv2resize()
+weights = analyse()
+cv2resize()
 #red_green(weights)
 #weights = resize()
 
